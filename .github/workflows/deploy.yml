@@ -1,69 +1,173 @@
 name: Deploy Pipeline
 
 on:
-  workflow_dispatch: # manual trigger
-  workflow_run:
-    workflows: ["CI/CD Pipeline"]
-    types:
-      - completed
+  push:
+    branches: [main]
+  workflow_dispatch: # manual trigger allowed
+
+permissions:
+  contents: read
+  pull-requests: write
 
 jobs:
-    # ----------------- DEPLOY -----------------
-    deploy:
-        if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
-        runs-on: ubuntu-latest
-        environment: development
+  # ----------------- DEPLOY -----------------
+  deploy:
+    runs-on: ubuntu-latest
+    environment: development
 
-        steps:
-            # 1. Checkout repository
-            - name: Checkout repo
-              uses: actions/checkout@v4
-            
-            # ----- BACKEND -----
-            - name: Create backend application.yml
-              run: echo "${{ secrets.BACKEND_APP_YML }}" > backend/application.yml
-            
-            - name: Build backend Docker image
-              run: docker build -t backend:latest ./backend
-            
-            # ----- FRONTEND -----
-            - name: Create frontend .env from secret
-              run: echo "${{ secrets.FRONTEND_ENV_FILE }}" > frontend/.env
-            
-            - name: Build frontend Docker image
-              run: docker build -t frontend:latest ./frontend
-            
-            # ----- Save Docker images -----
-            - name: Save Docker images
-              run: |
-                mkdir -p docker-images
-                docker save frontend:latest -o docker-images/frontend.tar
-                docker save backend:latest -o docker-images/backend.tar
-            
-            # ----- Copy Docker images + docker-compose.yml to EC2 -----
-            - name: Copy Docker images via SCP
-              uses: appleboy/scp-action@master
-              with:
-                host: ${{ secrets.EC2_HOST }}
-                username: ubuntu
-                port: 22
-                key: ${{ secrets.EC2_SSH_KEY }}
-                source: "docker-images/frontend.tar,docker-images/backend.tar"
-                target: "/home/ubuntu/TutorLink/"
-            
-            # ----- Deploy containers on EC2 -----
-            - name: Deploy Docker images on EC2
-              uses: appleboy/ssh-action@master
-              with:
-                host: ${{ secrets.EC2_HOST }}
-                username: ubuntu
-                key: ${{ secrets.EC2_SSH_KEY }}
-                script: |
-                  cd /home/ubuntu/TutorLink/docker-images
-                  sudo docker load -i frontend.tar
-                  sudo docker load -i backend.tar
-                  cd /home/ubuntu/TutorLink
-                  sudo docker compose down
-                  sudo docker compose up -d
-            
-  
+    steps:
+      # Checkout repository
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # ----- Determine changes only for push -----
+      - name: Determine base and head commits
+        id: sha
+        if: github.event_name == 'push'
+        run: |
+          echo "Detected push trigger"
+          git fetch --depth=2 origin ${{ github.ref }}
+          echo "base_sha=$(git rev-parse HEAD^)" >> $GITHUB_OUTPUT
+          echo "head_sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
+
+      - name: Debug SHAs
+        if: github.event_name == 'push'
+        run: |
+          echo "Base SHA: ${{ steps.sha.outputs.base_sha }}"
+          echo "Head SHA: ${{ steps.sha.outputs.head_sha }}"
+          git log --oneline -5
+
+      # ----- Check modified paths (only push) -----
+      - name: Check modified paths
+        id: changes
+        if: github.event_name == 'push'
+        uses: dorny/paths-filter@v3
+        with:
+          base: ${{ steps.sha.outputs.base_sha }}
+          ref: ${{ steps.sha.outputs.head_sha }}
+          filters: |
+            frontend:
+              - 'frontend/**'
+            backend:
+              - 'backend/**'
+
+      # ----- Set deploy flags for manual or push -----
+      - name: Set deploy flags
+        id: deploy_flags
+        shell: bash
+        run: |
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            echo "frontend=true" >> $GITHUB_OUTPUT
+            echo "backend=true" >> $GITHUB_OUTPUT
+          else
+            echo "frontend=${{ steps.changes.outputs.frontend }}" >> $GITHUB_OUTPUT
+            echo "backend=${{ steps.changes.outputs.backend }}" >> $GITHUB_OUTPUT
+          fi
+
+      # ----- Show detected changes -----
+      - name: Show detected changes
+        run: |
+          echo "Frontend changed: ${{ steps.deploy_flags.outputs.frontend }}"
+          echo "Backend changed: ${{ steps.deploy_flags.outputs.backend }}"
+
+      # ----- BACKEND -----
+      - name: Create backend application.yml
+        if: ${{ steps.deploy_flags.outputs.backend == 'true' }}
+        run: echo "${{ secrets.BACKEND_APP_YML }}" > backend/application.yml
+
+      - name: Build backend Docker image
+        if: ${{ steps.deploy_flags.outputs.backend == 'true' }}
+        run: docker build -t backend:latest ./backend
+
+      # ----- FRONTEND -----
+      - name: Create frontend .env from secret
+        if: ${{ steps.deploy_flags.outputs.frontend == 'true' }}
+        run: echo "${{ secrets.FRONTEND_ENV_FILE }}" > frontend/.env
+
+      - name: Build frontend Docker image
+        if: ${{ steps.deploy_flags.outputs.frontend == 'true' }}
+        run: docker build -t frontend:latest ./frontend
+
+      # ----- Save Docker images -----
+      - name: Save Docker images
+        if: ${{ steps.deploy_flags.outputs.frontend == 'true' || steps.deploy_flags.outputs.backend == 'true' }}
+        run: |
+          mkdir -p docker-images
+          if [ "${{ steps.deploy_flags.outputs.frontend }}" == "true" ]; then
+            docker save frontend:latest -o docker-images/frontend.tar
+          fi
+          if [ "${{ steps.deploy_flags.outputs.backend }}" == "true" ]; then
+            docker save backend:latest -o docker-images/backend.tar
+          fi
+
+      # ---- Scan Backend Image ----
+      - name: Trivy Backend image vulnerability scanning
+        if: ${{ steps.deploy_flags.outputs.backend == 'true' }}
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          input: "docker-images/backend.tar"
+          format: "table"
+          exit-code: "1" # fail job if HIGH/CRITICAL found
+          ignore-unfixed: true
+          vuln-type: "os,library"
+          severity: "CRITICAL,HIGH"
+
+      # ---- Scan Frontend Image ----
+      - name: Scan Frontend Docker image with Trivy
+        if: ${{ steps.deploy_flags.outputs.frontend == 'true' }}
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          input: "docker-images/frontend.tar"
+          format: "table"
+          exit-code: "1"
+          ignore-unfixed: true
+          vuln-type: "os,library"
+          severity: "CRITICAL,HIGH"
+
+      # ----- Copy Docker images + docker-compose.yml to EC2 -----
+      - name: Copy Docker images via SCP
+        if: ${{ steps.deploy_flags.outputs.frontend == 'true' || steps.deploy_flags.outputs.backend == 'true' }}
+        uses: appleboy/scp-action@master
+        env:
+          DEBUG: true
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          port: 22
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: "docker-images/frontend.tar,docker-images/backend.tar"
+          target: "/home/ubuntu/TutorLink/"
+
+      # ----- Deploy containers on EC2 -----
+      - name: Deploy Docker images on EC2
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            set -e
+            cd /home/ubuntu/TutorLink/docker-images
+
+            echo "Loading new Docker images..."
+            if [ -f frontend.tar ]; then
+              sudo docker load -i frontend.tar
+            fi
+
+            if [ -f backend.tar ]; then
+              sudo docker load -i backend.tar
+            fi
+
+            echo "Rebuilding containers..."
+            cd /home/ubuntu/TutorLink
+
+            # Recreate only updated services
+            if [ -f /home/ubuntu/TutorLink/docker-images/frontend.tar ]; then
+              sudo docker compose up -d --force-recreate frontend
+            fi
+
+            if [ -f /home/ubuntu/TutorLink/docker-images/backend.tar ]; then
+              sudo docker compose up -d --force-recreate backend
+            fi

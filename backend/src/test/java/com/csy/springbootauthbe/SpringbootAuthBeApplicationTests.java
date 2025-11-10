@@ -2,7 +2,6 @@ package com.csy.springbootauthbe;
 
 import com.csy.springbootauthbe.admin.repository.AdminRepository;
 import com.csy.springbootauthbe.booking.repository.BookingRepository;
-import com.csy.springbootauthbe.doctor.repository.DoctorRepository;
 import com.csy.springbootauthbe.notification.repository.NotificationRepository;
 import com.csy.springbootauthbe.notification.service.NotificationService;
 import com.csy.springbootauthbe.student.repository.StudentRepository;
@@ -64,7 +63,6 @@ class SpringbootAuthBeApplicationTests {
     @MockBean private UserRepository userRepository;
     @MockBean private TutorRepository tutorRepository;
     @MockBean private StudentRepository studentRepository;
-    @MockBean private DoctorRepository doctorRepository;
     @MockBean private BookingRepository bookingRepository;
     @MockBean private NotificationRepository notificationRepository;
 

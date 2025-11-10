@@ -1,13 +1,14 @@
 package com.csy.springbootauthbe.user.service;
 
-import com.csy.springbootauthbe.admin.dto.AdminDTO;
 import com.csy.springbootauthbe.admin.service.AdminService;
 import com.csy.springbootauthbe.common.utils.SanitizedLogger;
-import com.csy.springbootauthbe.student.dto.StudentDTO;
 import com.csy.springbootauthbe.student.service.StudentService;
-import com.csy.springbootauthbe.tutor.dto.TutorDTO;
 import com.csy.springbootauthbe.tutor.service.TutorService;
 import com.csy.springbootauthbe.user.entity.AccountStatus;
+import com.csy.springbootauthbe.user.factory.AdminCreator;
+import com.csy.springbootauthbe.user.factory.RoleEntityCreator;
+import com.csy.springbootauthbe.user.factory.StudentCreator;
+import com.csy.springbootauthbe.user.factory.TutorCreator;
 import com.csy.springbootauthbe.user.utils.AuthenticationResponse;
 import com.csy.springbootauthbe.user.utils.LoginRequest;
 import com.csy.springbootauthbe.user.utils.RegisterRequest;
@@ -17,13 +18,13 @@ import com.csy.springbootauthbe.user.entity.Role;
 import com.csy.springbootauthbe.user.entity.User;
 import com.csy.springbootauthbe.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -42,7 +43,7 @@ public class AuthenticationService {
     public AuthenticationResponse register(RegisterRequest request) {
         logger.info("Register request received: email={}, role={}", request.getEmail(), request.getRole());
 
-        if (repository.existsByEmail(request.getEmail())) {
+        if (repository.existsByEmailAndStatusNot(request.getEmail(), AccountStatus.DELETED)) {
             logger.warn("Registration failed: Email already exists - {}", request.getEmail());
             throw new DataIntegrityViolationException("Email already exists");
         }
@@ -64,35 +65,14 @@ public class AuthenticationService {
         repository.save(user);
         logger.info("User saved successfully: id={}, email={}", user.getId(), user.getEmail());
 
-        // Create student entity if role is STUDENT
-        if (userRole == Role.STUDENT) {
-            var studentDTO = StudentDTO.builder()
-                    .userId(user.getId())
-                    .studentNumber(request.getStudentNumber())
-                    .gradeLevel(request.getGradeLevel())
-                    .build();
-            studentService.createStudent(studentDTO);
-            logger.info("Student entity created for userId={}", user.getId());
-        }
+        Map<Role, RoleEntityCreator> creatorMap = Map.of(
+                Role.STUDENT, new StudentCreator(studentService),
+                Role.TUTOR, new TutorCreator(tutorService),
+                Role.ADMIN, new AdminCreator(adminService)
+        );
 
-        // Create tutor entity if role is TUTOR
-        if (userRole == Role.TUTOR) {
-            TutorDTO tutorDTO = TutorDTO.builder().userId(user.getId()).subject(request.getSubject()).build();
-            tutorService.createTutor(tutorDTO);
-            logger.info("Tutor entity created for userId={}", user.getId());
-        }
-
-        // Create admin entity if role is ADMIN
-        if (userRole == Role.ADMIN) {
-            AdminDTO adminDTO = AdminDTO.builder()
-                .userId(user.getId())
-                .permissions(request.getPermissions())
-                .build();
-            adminService.createAdmin(adminDTO);
-            logger.info("Admin entity created for userId={}", user.getId());
-        }
-
-
+        creatorMap.getOrDefault(userRole, (u, r) -> {}).createEntity(user, request);
+        logger.info("{} entity created for userId={}", userRole, user.getId());
 
         var jwtToken = jwtService.generateToken(user);
         logger.info("JWT generated for userId={}", user.getId());
@@ -126,7 +106,7 @@ public class AuthenticationService {
             throw e;
         }
 
-        var user = repository.findByEmail(request.getEmail())
+        var user = repository.findByEmailAndStatusNot(request.getEmail(), AccountStatus.DELETED)
                 .orElseThrow(() -> {
                     logger.error("User not found for email={}", request.getEmail());
                     return new IllegalArgumentException("User not found");

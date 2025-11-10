@@ -1,6 +1,6 @@
 package com.csy.springbootauthbe.admin.dto;
 
-import com.csy.springbootauthbe.admin.entity.Permissions;
+
 import com.csy.springbootauthbe.tutor.dto.TutorDTO;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -31,4 +31,36 @@ public class AdminDashboardDTO {
     private int activeAdmins;
     private int suspendedAdmins;
     private List<TutorDTO> pendingTutors;
+
+    private TransactionMetrics transactionMetrics;
+
+    @Data
+    @AllArgsConstructor
+    @NoArgsConstructor
+    @Builder
+    public static class TransactionSummary {
+        private String description;
+        private Double amount;
+    }
+
+    @Data
+    @AllArgsConstructor
+    @NoArgsConstructor
+    @Builder
+    public static class MonthlyEarnings {
+        private String month;
+        private Double total;
+    }
+
+    @Data
+    @AllArgsConstructor
+    @NoArgsConstructor
+    @Builder
+    public static class TransactionMetrics {
+        private Double totalEarnings;
+        private Double commissionCollected;
+        private TransactionSummary highestTransaction;
+        private List<MonthlyEarnings> monthlyEarnings;
+    }
 }
+

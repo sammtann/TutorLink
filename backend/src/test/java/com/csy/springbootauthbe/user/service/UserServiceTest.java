@@ -68,7 +68,7 @@ class UserServiceTest {
     @Test
     void getCurrentAdmin_shouldReturnAdminResponse() {
         mockAuthentication("admin@example.com");
-        when(userRepository.findByEmail("admin@example.com")).thenReturn(Optional.of(adminUser));
+        when(userRepository.findByEmailAndStatusNot("admin@example.com",AccountStatus.DELETED)).thenReturn(Optional.of(adminUser));
 
         UserResponse response = userService.getCurrentAdmin();
 
@@ -80,7 +80,7 @@ class UserServiceTest {
     @Test
     void getCurrentAdmin_shouldThrowIfNotAdmin() {
         mockAuthentication("student@example.com");
-        when(userRepository.findByEmail("student@example.com")).thenReturn(Optional.of(studentUser));
+        when(userRepository.findByEmailAndStatusNot("student@example.com",AccountStatus.DELETED)).thenReturn(Optional.of(studentUser));
 
         assertThrows(AccessDeniedException.class, () -> userService.getCurrentAdmin());
     }
@@ -89,7 +89,7 @@ class UserServiceTest {
     @Test
     void getCurrentStudent_shouldReturnStudentResponse() {
         mockAuthentication("student@example.com");
-        when(userRepository.findByEmail("student@example.com")).thenReturn(Optional.of(studentUser));
+        when(userRepository.findByEmailAndStatusNot("student@example.com",AccountStatus.DELETED)).thenReturn(Optional.of(studentUser));
 
         UserResponse response = userService.getCurrentStudent();
 
@@ -101,7 +101,7 @@ class UserServiceTest {
     @Test
     void getCurrentStudent_shouldThrowIfNotStudent() {
         mockAuthentication("admin@example.com");
-        when(userRepository.findByEmail("admin@example.com")).thenReturn(Optional.of(adminUser));
+        when(userRepository.findByEmailAndStatusNot("admin@example.com",AccountStatus.DELETED)).thenReturn(Optional.of(adminUser));
 
         assertThrows(AccessDeniedException.class, () -> userService.getCurrentStudent());
     }

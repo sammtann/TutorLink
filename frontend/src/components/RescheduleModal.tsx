@@ -7,13 +7,17 @@ import { useAppSelector } from "@/redux/store";
 import { toast } from "react-toastify";
 
 interface Props {
-  bookingId: string;
-  tutorId: string;
+  booking: {
+    bookingId: string;
+    tutorId: string;
+    tutorName: string;
+    studentName: string;
+  };
   onClose: () => void;
   onRescheduleConfirmed: () => void;
 }
 
-const RescheduleModal = ({ bookingId, tutorId, onClose, onRescheduleConfirmed }: Props) => {
+const RescheduleModal = ({ booking, onClose, onRescheduleConfirmed }: Props) => {
   const { user } = useAppSelector((state) => state.user);
 
   const [tutorAvailability, setTutorAvailability] = useState<Record<string, TimeSlot>>({});
@@ -37,13 +41,13 @@ const RescheduleModal = ({ bookingId, tutorId, onClose, onRescheduleConfirmed }:
   // Fetch Tutor Availability
   // -------------------------------
   useEffect(() => {
-    if (!user?.token || !tutorId) return;
+    if (!user?.token || !booking.tutorId) return;
     const token = user.token;
 
     const fetchTutor = async () => {
       try {
         setLoading(true);
-        const res = await GetTutorProfile(token, tutorId);
+        const res = await GetTutorProfile(token, booking.tutorId);
         setTutorAvailability(res.data.availability || {});
         setLessonTypes(res.data.lessonType || ["Beginner", "Advanced"]);
       } catch (err) {
@@ -55,13 +59,13 @@ const RescheduleModal = ({ bookingId, tutorId, onClose, onRescheduleConfirmed }:
     };
 
     fetchTutor();
-  }, [tutorId, user]);
+  }, [booking.tutorId, user]);
 
   // -------------------------------
   // Fetch Tutor Booked Slots
   // -------------------------------
   useEffect(() => {
-    if (!user?.token || !tutorId) return;
+    if (!user?.token || !booking.tutorId) return;
     const token = user.token;
 
     const fetchBookings = async () => {
@@ -69,7 +73,7 @@ const RescheduleModal = ({ bookingId, tutorId, onClose, onRescheduleConfirmed }:
         const startDate = formatLocalDate(new Date());
         const endDate = formatLocalDate(new Date(new Date().setMonth(new Date().getMonth() + 3)));
 
-        const res = await GetBookingsForTutorRange(tutorId, startDate, endDate, token);
+        const res = await GetBookingsForTutorRange(booking.tutorId, startDate, endDate, token);
         setBookedSlots(res.data.map((b: any) => ({ date: b.date, status: b.status })));
       } catch (err) {
         console.error("Failed to fetch booked slots", err);
@@ -78,7 +82,7 @@ const RescheduleModal = ({ bookingId, tutorId, onClose, onRescheduleConfirmed }:
     };
 
     fetchBookings();
-  }, [tutorId, user]);
+  }, [booking.tutorId, user]);
 
   // -------------------------------
   // Slot Click Handler
@@ -96,10 +100,12 @@ const RescheduleModal = ({ bookingId, tutorId, onClose, onRescheduleConfirmed }:
 
     try {
       await RequestReschedule(
-        bookingId,
+        booking.bookingId,
         {
-          tutorId,
+          tutorId: booking.tutorId,
           studentId: user.id,
+          tutorName: booking.tutorName,
+          studentName: booking.studentName,
           date: formatLocalDate(selectedSlot.date), // ✅ use local date
           start: selectedSlot.slot.start,
           end: selectedSlot.slot.end,

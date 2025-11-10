@@ -10,6 +10,8 @@ import java.math.BigDecimal;
 @NoArgsConstructor
 public class BookingRequest {
     private String tutorId;
+    private String tutorName;
+    private String studentName;
     private String studentId;
     private String lessonType;
     private String date;   // yyyy-MM-dd

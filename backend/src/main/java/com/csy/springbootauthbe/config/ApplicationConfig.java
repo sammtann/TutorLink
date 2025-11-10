@@ -1,5 +1,6 @@
 package com.csy.springbootauthbe.config;
 
+import com.csy.springbootauthbe.user.entity.AccountStatus;
 import com.csy.springbootauthbe.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
@@ -20,7 +21,7 @@ public class ApplicationConfig {
     private final UserRepository repository;
     @Bean
     public UserDetailsService userDetailsService() {
-        return username -> repository.findByEmail(username)
+        return username -> repository.findByEmailAndStatusNot(username, AccountStatus.DELETED)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found"));
 
     }

@@ -28,6 +28,16 @@ export const GetTutorProfile = async (
   return await api.get(url);
 };
 
+export const GetTutorFileViewUrl = async (
+  token: string,
+  fileKey: string
+): Promise<AxiosResponse<string>> => {
+  const api = getApiInstance(token);
+  const url = `${BASE_URL}/qualifications/url?key=${encodeURIComponent(fileKey)}`;
+  return await api.get(url);
+};
+
+
 export const UploadTutorProfilePicture = async (
   tutorId: string,
   file: File,
@@ -44,4 +54,30 @@ export const UploadTutorProfilePicture = async (
       "Content-Type": "multipart/form-data",
     },
   });
+};
+
+/** Add a review for a tutor */
+export const AddTutorReview = async (
+  token: string,
+  tutorId: string,
+  review: {
+    bookingId: string;
+    studentName: string;
+    rating: number;
+    comment: string;
+  }
+): Promise<AxiosResponse<any>> => {
+  const api = getApiInstance(token);
+  const url = `${BASE_URL}/${tutorId}/review`;
+  return await api.post(url, review);
+};
+
+/** Get all reviews for a specific tutor by userId */
+export const GetTutorReviewsByUserId = async (
+  token: string,
+  userId: string
+): Promise<AxiosResponse<any>> => {
+  const api = getApiInstance(token);
+  const url = `${BASE_URL}/${userId}/reviews`;
+  return await api.get(url);
 };

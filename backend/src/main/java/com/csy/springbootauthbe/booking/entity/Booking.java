@@ -19,6 +19,8 @@ public class Booking {
     private String id;
     private String tutorId;
     private String studentId;
+    private String tutorName;
+    private String studentName;
     private String date;
     private String start;
     private String end;

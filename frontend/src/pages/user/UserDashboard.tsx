@@ -12,7 +12,7 @@ const UserDashboard = () => {
     //clear redux
     dispatch(setUser(null));
     //redirect
-    navigate("/login");
+    navigate("/");
   };
   return (
     <div className="h-screen bg-primary flex items-center justify-center p-5 overflow-hidden">

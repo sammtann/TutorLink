@@ -2,7 +2,7 @@ import Navbar from "@/components/Navbar";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { EyeIcon, PauseCircleIcon, PlayCircleIcon, TrashIcon } from "@heroicons/react/24/solid";
-import { GetAllTutors, DeleteUser, ActivateUser, SuspendUser, ApproveTutor, RejectTutor } from "@/api/adminAPI";
+import { GetAllTutors, DeleteUser, ActivateUser, SuspendUser} from "@/api/adminAPI";
 import { toast } from "react-toastify";
 import { useAppDispatch, useAppSelector } from "@/redux/store";
 import { Tutor } from "@/types/TutorType";
@@ -13,7 +13,7 @@ const ManageTutors = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [tutors, setTutors] = useState<Tutor[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
-  const tutorsPerPage = 5;
+  const tutorsPerPage = 10;
   const dispatch = useAppDispatch();
 
   // Sorting

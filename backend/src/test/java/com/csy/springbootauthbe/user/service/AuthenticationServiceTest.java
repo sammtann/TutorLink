@@ -1,10 +1,13 @@
 package com.csy.springbootauthbe.user.service;
 
+import com.csy.springbootauthbe.admin.dto.AdminDTO;
+import com.csy.springbootauthbe.admin.service.AdminService;
 import com.csy.springbootauthbe.config.JWTService;
 import com.csy.springbootauthbe.student.dto.StudentDTO;
 import com.csy.springbootauthbe.student.service.StudentService;
 import com.csy.springbootauthbe.tutor.dto.TutorDTO;
 import com.csy.springbootauthbe.tutor.service.TutorService;
+import com.csy.springbootauthbe.user.entity.AccountStatus;
 import com.csy.springbootauthbe.user.entity.Role;
 import com.csy.springbootauthbe.user.entity.User;
 import com.csy.springbootauthbe.user.repository.UserRepository;
@@ -35,6 +38,7 @@ class AuthenticationServiceTest {
     @Mock AuthenticationManager authenticationManager;
     @Mock StudentService studentService;
     @Mock TutorService tutorService;
+    @Mock AdminService adminService;
 
     @InjectMocks AuthenticationService auth;
 
@@ -46,12 +50,12 @@ class AuthenticationServiceTest {
 
         when(authenticationManager.authenticate(any()))
                 .thenReturn(new UsernamePasswordAuthenticationToken("nobody@nowhere.com", "pw"));
-        when(repository.findByEmail("nobody@nowhere.com")).thenReturn(Optional.empty());
+        when(repository.findByEmailAndStatusNot("nobody@nowhere.com", AccountStatus.DELETED)).thenReturn(Optional.empty());
 
         assertThrows(IllegalArgumentException.class, () -> auth.login(req));
 
         verify(authenticationManager).authenticate(any(UsernamePasswordAuthenticationToken.class));
-        verify(repository).findByEmail("nobody@nowhere.com");
+        verify(repository).findByEmailAndStatusNot("nobody@nowhere.com",  AccountStatus.DELETED);
         verifyNoInteractions(jwtService);
     }
 
@@ -65,7 +69,7 @@ class AuthenticationServiceTest {
                 .thenThrow(new BadCredentialsException("bad creds"));
 
         assertThrows(BadCredentialsException.class, () -> auth.login(req));
-        verify(repository, never()).findByEmail(anyString());
+        verify(repository, never()).findByEmailAndStatusNot(anyString(), any());
         verifyNoInteractions(jwtService);
     }
 
@@ -84,7 +88,7 @@ class AuthenticationServiceTest {
 
         when(authenticationManager.authenticate(any()))
                 .thenReturn(new UsernamePasswordAuthenticationToken("ok@x.com", "pw"));
-        when(repository.findByEmail("ok@x.com")).thenReturn(Optional.of(dbUser));
+        when(repository.findByEmailAndStatusNot("ok@x.com", AccountStatus.DELETED)).thenReturn(Optional.of(dbUser));
         when(jwtService.generateToken(dbUser)).thenReturn("jwt-login");
 
         AuthenticationResponse resp = auth.login(req);
@@ -107,7 +111,7 @@ class AuthenticationServiceTest {
         req.setLastname("X");
         req.setRole("User");
 
-        when(repository.existsByEmail("u@x.com")).thenReturn(false);
+        when(repository.existsByEmailAndStatusNot("u@x.com", AccountStatus.DELETED)).thenReturn(false);
         when(passwordEncoder.encode("P@ss")).thenReturn("hashed");
         when(jwtService.generateToken(any(User.class))).thenReturn("jwt");
         when(repository.save(any(User.class))).thenAnswer(inv -> {
@@ -140,7 +144,7 @@ class AuthenticationServiceTest {
         RegisterRequest req = new RegisterRequest();
         req.setEmail("dupe@x.com");
 
-        when(repository.existsByEmail("dupe@x.com")).thenReturn(true);
+        when(repository.existsByEmailAndStatusNot("dupe@x.com", AccountStatus.DELETED)).thenReturn(true);
 
         assertThrows(RuntimeException.class, () -> auth.register(req));
         verify(repository, never()).save(any());
@@ -152,7 +156,7 @@ class AuthenticationServiceTest {
         req.setEmail("x@x.com");
         req.setRole("NotARole");
 
-        when(repository.existsByEmail("x@x.com")).thenReturn(false);
+        when(repository.existsByEmailAndStatusNot("x@x.com", AccountStatus.DELETED)).thenReturn(false);
 
         assertThrows(IllegalArgumentException.class, () -> auth.register(req));
         verify(repository, never()).save(any());
@@ -167,7 +171,7 @@ class AuthenticationServiceTest {
         req.setLastname("X");
         req.setRole("Tutor");
 
-        when(repository.existsByEmail("tutor@x.com")).thenReturn(false);
+        when(repository.existsByEmailAndStatusNot("tutor@x.com", AccountStatus.DELETED)).thenReturn(false);
         when(passwordEncoder.encode("pw")).thenReturn("hashed");
         when(jwtService.generateToken(any(User.class))).thenReturn("jwt");
         when(repository.save(any(User.class))).thenAnswer(inv -> {
@@ -193,7 +197,7 @@ class AuthenticationServiceTest {
         req.setLastname("Y");
         req.setRole("Student");
 
-        when(repository.existsByEmail("student@x.com")).thenReturn(false);
+        when(repository.existsByEmailAndStatusNot("student@x.com", AccountStatus.DELETED)).thenReturn(false);
         when(passwordEncoder.encode("pw")).thenReturn("hashed");
         when(jwtService.generateToken(any(User.class))).thenReturn("jwt");
         when(repository.save(any(User.class))).thenAnswer(inv -> {
@@ -208,5 +212,31 @@ class AuthenticationServiceTest {
         assertNotNull(resp);
         assertEquals(Role.STUDENT, resp.getUser().getRole());
         verify(studentService).createStudent(any(StudentDTO.class));
+    }
+
+    @Test
+    void register_roleAdmin_createsAdminAndCallsAdminService() {
+        RegisterRequest req = new RegisterRequest();
+        req.setEmail("admin@x.com");
+        req.setPassword("pw");
+        req.setFirstname("S");
+        req.setLastname("Y");
+        req.setRole("Admin");
+
+        when(repository.existsByEmailAndStatusNot("admin@x.com", AccountStatus.DELETED)).thenReturn(false);
+        when(passwordEncoder.encode("pw")).thenReturn("hashed");
+        when(jwtService.generateToken(any(User.class))).thenReturn("jwt");
+        when(repository.save(any(User.class))).thenAnswer(inv -> {
+            User u = inv.getArgument(0);
+            u.setId("S123");
+            u.setRole(Role.ADMIN);
+            return u;
+        });
+
+        AuthenticationResponse resp = auth.register(req);
+
+        assertNotNull(resp);
+        assertEquals(Role.ADMIN, resp.getUser().getRole());
+        verify(adminService).createAdmin(any(AdminDTO.class));
     }
 }

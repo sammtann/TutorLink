@@ -1,0 +1,105 @@
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
+
+exports[`BookingModal matches snapshot 1`] = `
+<div>
+  <div
+    class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-40 z-50"
+  >
+    <div
+      class="bg-white rounded-xl shadow-lg p-6 w-96"
+    >
+      <h2
+        class="text-lg font-semibold mb-4"
+      >
+        Confirm Booking
+      </h2>
+      <p
+        class="mb-4"
+      >
+        Please confirm your booking details below:
+      </p>
+      <p
+        class="mb-2"
+      >
+        📅 
+        <strong>
+          Date:
+        </strong>
+         
+        Mon Nov 10 2025
+         
+        <br />
+        ⏰ 
+        <strong>
+          Time:
+        </strong>
+         
+        10:00
+         - 
+        12:00
+      </p>
+      <label
+        class="block mb-2 text-sm font-medium"
+      >
+        Choose Lesson Type:
+      </label>
+      <select
+        class="w-full border rounded-md p-2 mb-4"
+      >
+        <option
+          value="Math"
+        >
+          Math
+        </option>
+        <option
+          value="Science"
+        >
+          Science
+        </option>
+        <option
+          value="English"
+        >
+          English
+        </option>
+      </select>
+      <div
+        class="mb-4 p-3 bg-blue-50 rounded-md text-sm text-gray-700"
+      >
+        <p>
+          💰 Estimated Cost:
+           
+          <span
+            class="font-bold text-blue-600"
+          >
+            SGD 
+            100.00
+          </span>
+        </p>
+        <p
+          class="text-xs text-gray-500"
+        >
+          (
+          50
+           SGD/hr × 
+          2
+           hour(s))
+        </p>
+      </div>
+      <div
+        class="flex justify-end gap-2"
+      >
+        <button
+          class="px-4 py-2 rounded-md bg-gray-200 hover:bg-gray-300"
+        >
+          Cancel
+        </button>
+        <button
+          class="px-4 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700"
+        >
+          Confirm
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+`;

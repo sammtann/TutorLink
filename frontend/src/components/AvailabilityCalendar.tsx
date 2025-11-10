@@ -38,9 +38,19 @@ const AvailabilityCalendar = ({
     return new Date(today.getFullYear(), today.getMonth(), 1);
   });
 
+  const [isLoading, setIsLoading] = useState(false);
+
   useEffect(() => {
+    setIsLoading(true);
     onMonthChange?.(monthStart);
   }, [monthStart]);
+
+  useEffect(() => {
+    if (bookedSlots && bookedSlots.length >= 0) {
+      setIsLoading(false);
+    }
+  }, [bookedSlots]);
+
 
   const formatDate = (date: Date) =>
     `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(
@@ -107,8 +117,8 @@ const AvailabilityCalendar = ({
 
   const studentClasses = {
     booked: "bg-red-200 text-red-700 cursor-not-allowed",
-    pending: "bg-yellow-200 text-yellow-700 cursor-pointer",
-    on_hold: "bg-purple-200 text-purple-800 cursor-pointer",
+    pending: "bg-yellow-200 text-yellow-700 cursor-not-allowed",
+    on_hold: "bg-purple-200 text-purple-800 cursor-not-allowed",
     reschedule_requested: "bg-blue-200 text-blue-800 cursor-not-allowed",
     available: "bg-green-100 hover:bg-green-200 cursor-pointer",
     disabled: "bg-gray-100 cursor-not-allowed",
@@ -118,7 +128,7 @@ const AvailabilityCalendar = ({
   const tutorClasses = {
     booked: "bg-green-100 hover:bg-green-200 cursor-pointer",
     pending: "bg-yellow-200 text-yellow-700 cursor-pointer",
-    on_hold: "bg-purple-200 text-purple-800 cursor-not-allowed",
+    on_hold: "bg-purple-200 text-purple-800 cursor-pointer",
     reschedule_requested: "bg-blue-200 text-blue-800 cursor-not-allowed",
     available: "cursor-not-allowed",
     disabled: "bg-gray-100 cursor-not-allowed",
@@ -139,67 +149,72 @@ const AvailabilityCalendar = ({
           &gt;
         </button>
       </div>
+      {isLoading ? (
+        <div className="min-h-[320px] flex justify-center items-center py-12">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-600"></div>
+        </div>
+      ) : (
+        <>
+          {/* Weekday Headers */}
+          <div className="grid grid-cols-7 text-center font-bold border-b pb-1">
+            {weekdays.map((day) => (
+              <div key={day}>{day}</div>
+            ))}
+          </div>
 
-      {/* Weekday Headers */}
-      <div className="grid grid-cols-7 text-center font-bold border-b pb-1">
-        {weekdays.map((day) => (
-          <div key={day}>{day}</div>
-        ))}
-      </div>
+          {/* Days */}
+          <div className="grid grid-cols-7 gap-2 mt-2 text-center">
+            {Array(monthDates[0].getDay())
+              .fill(null)
+              .map((_, idx) => (
+                <div key={`empty-${idx}`} className="p-2"></div>
+              ))}
 
-      {/* Days */}
-      <div className="grid grid-cols-7 gap-2 mt-2 text-center">
-        {Array(monthDates[0].getDay())
-          .fill(null)
-          .map((_, idx) => (
-            <div key={`empty-${idx}`} className="p-2"></div>
-          ))}
+            {monthDates.map((date) => {
+              const dayKey = date.toLocaleDateString(undefined, { weekday: "short" });
+              const slot = availability?.[dayKey];
+              const enabled = slot?.enabled ?? false;
+              const bookingStatus = getSlotStatus(date, enabled);
 
-        {monthDates.map((date) => {
-          const dayKey = date.toLocaleDateString(undefined, { weekday: "short" });
-          const slot = availability?.[dayKey];
-          const enabled = slot?.enabled ?? false;
-          const bookingStatus = getSlotStatus(date, enabled);
+              const dayClasses =
+                role === "student" ? studentClasses[bookingStatus] : tutorClasses[bookingStatus];
 
-          const dayClasses =
-            role === "student" ? studentClasses[bookingStatus] : tutorClasses[bookingStatus];
+              const combinedClasses = `${dayClasses} ${isPastDate(date)
+                  ? "opacity-50 text-gray-400 !cursor-not-allowed hover:!bg-transparent"
+                  : ""
+                }`;
 
-          const combinedClasses = `${dayClasses} ${
-            isPastDate(date)
-              ? "opacity-50 text-gray-400 !cursor-not-allowed hover:!bg-transparent"
-              : ""
-          }`;
-
-          return (
-            <div
-              key={date.toISOString()}
-              className={`p-2 border rounded text-sm ${combinedClasses}`}
-              onClick={() => {
-                if (isPastDate(date)) return;
-                if (!slot?.enabled) return;
-                if (
-                  role === "student" &&
-                  bookingStatus !== "booked" &&
-                  bookingStatus !== "reschedule_requested"
-                ) {
-                  onSlotClick?.(date, slot);
-                }
-              }}>
-              <div className="font-semibold">{date.getDate()}</div>
-              {bookingStatus === "booked" && <div className="text-xs">Booked</div>}
-              {bookingStatus === "pending" && <div className="text-xs">Pending</div>}
-              {bookingStatus === "on_hold" && <div className="text-xs">On Hold</div>}
-              {bookingStatus === "reschedule_requested" && (
-                <div className="text-xs">Reschedule Requested</div>
-              )}
-              {bookingStatus === "available" && enabled && (
-                <div className="text-xs">{`${slot.start} - ${slot.end}`}</div>
-              )}
-              {bookingStatus === "expired" && <div className="text-xs">Expired</div>}
-            </div>
-          );
-        })}
-      </div>
+              return (
+                <div
+                  key={date.toISOString()}
+                  className={`p-2 border rounded text-sm ${combinedClasses}`}
+                  onClick={() => {
+                    if (isPastDate(date)) return;
+                    if (!slot?.enabled) return;
+                    if (
+                      (role === "student" && bookingStatus === "available") ||
+                      (role === "tutor" && (bookingStatus !== "reschedule_requested"))
+                    ) {
+                      onSlotClick?.(date, slot);
+                    }
+                  }}>
+                  <div className="font-semibold">{date.getDate()}</div>
+                  {bookingStatus === "booked" && <div className="text-xs">Booked</div>}
+                  {bookingStatus === "pending" && <div className="text-xs">Pending</div>}
+                  {bookingStatus === "on_hold" && <div className="text-xs">On Hold</div>}
+                  {bookingStatus === "reschedule_requested" && (
+                    <div className="text-xs">Reschedule Requested</div>
+                  )}
+                  {bookingStatus === "available" && enabled && (
+                    <div className="text-xs">{`${slot.start} - ${slot.end}`}</div>
+                  )}
+                  {bookingStatus === "expired" && <div className="text-xs">Expired</div>}
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
     </div>
   );
 };

@@ -19,7 +19,7 @@ public class GlobalExceptionConfig {
     }
 
     @ExceptionHandler(BadCredentialsException.class)
-    public ResponseEntity<?> handleBadCredentials(BadCredentialsException ex) {
+    public ResponseEntity<?> handleBadCredentials() {
         return buildResponse(HttpStatus.UNAUTHORIZED, "Invalid email or password");
     }
 
@@ -30,7 +30,7 @@ public class GlobalExceptionConfig {
     }
 
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<?> handleOtherExceptions(Exception ex) {
+    public ResponseEntity<?> handleOtherExceptions() {
         return buildResponse(HttpStatus.INTERNAL_SERVER_ERROR, "An unexpected error occurred");
     }
 

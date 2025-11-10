@@ -7,6 +7,9 @@ import com.csy.springbootauthbe.admin.entity.Permissions;
 import com.csy.springbootauthbe.admin.mapper.AdminMapper;
 import com.csy.springbootauthbe.admin.repository.AdminRepository;
 import com.csy.springbootauthbe.admin.util.AdminResponse;
+import com.csy.springbootauthbe.booking.dto.BookingDTO;
+import com.csy.springbootauthbe.booking.service.BookingServiceImpl;
+import com.csy.springbootauthbe.common.utils.SanitizedLogger;
 import com.csy.springbootauthbe.student.dto.StudentDTO;
 import com.csy.springbootauthbe.student.repository.StudentRepository;
 import com.csy.springbootauthbe.student.utils.StudentResponse;
@@ -19,8 +22,8 @@ import com.csy.springbootauthbe.user.entity.Role;
 import com.csy.springbootauthbe.user.entity.User;
 import com.csy.springbootauthbe.user.repository.UserRepository;
 import com.csy.springbootauthbe.user.utils.UserResponse;
+import com.csy.springbootauthbe.wallet.service.WalletService;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 
@@ -30,7 +33,6 @@ import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
-@Slf4j
 public class AdminServiceImpl implements AdminService {
 
     private final AdminMapper adminMapper;
@@ -38,6 +40,9 @@ public class AdminServiceImpl implements AdminService {
     private final UserRepository userRepository;
     private final StudentRepository studentRepository;
     private final TutorRepository tutorRepository;
+    private final WalletService walletService;
+    private final BookingServiceImpl bookingService;
+    private static final SanitizedLogger logger = SanitizedLogger.getLogger(AdminServiceImpl.class);
 
 
     // -------------------------------
@@ -47,6 +52,7 @@ public class AdminServiceImpl implements AdminService {
     public List<UserResponse> viewStudents(String adminUserId) {
         checkAdminWithPermission(adminUserId, new Permissions[]{Permissions.VIEW_STUDENTS});
         List<User> students = userRepository.findAllByRole(Role.STUDENT);
+        logger.info("Total students: {}", students.size());
         return students.stream()
             .map(user -> {
                 UserResponse.UserResponseBuilder builder = UserResponse.builder()
@@ -303,15 +309,6 @@ public class AdminServiceImpl implements AdminService {
     }
 
     @Override
-    public void createAdminByAdmin(String adminUserId, AdminDTO adminDTO) {
-        checkAdminWithPermission(adminUserId, new Permissions[]{Permissions.CREATE_ADMIN});
-        Admin newAdmin = adminMapper.toEntity(adminDTO);
-        Admin savedAdmin = adminRepository.save(newAdmin);
-        adminMapper.toDTO(savedAdmin);
-    }
-
-
-    @Override
     public void editAdminRoles(String adminUserId, String targetAdminId, List<Permissions> newPermissions) {
         checkAdminWithPermission(adminUserId, new Permissions[]{Permissions.EDIT_ADMIN_ROLES});
         Admin targetAdmin = adminRepository.findByUserId(targetAdminId)
@@ -412,9 +409,21 @@ public class AdminServiceImpl implements AdminService {
                 .filter(user -> Objects.equals(user.getStatus(), AccountStatus.PENDING_APPROVAL.toString()))
                 .toList();
 
+
+
         return new AdminDashboardDTO(totalUsers, activeUsers, suspendedUsers,
                 totalTutors, activeTutors, suspendedTutors, unverifiedTutors, totalStudents, activeStudents,
-                suspendedStudents, totalAdmins, activeAdmins, suspendedAdmins, pendingTutors);
+                suspendedStudents, totalAdmins, activeAdmins, suspendedAdmins, pendingTutors, walletService.getTransactionMetrics());
+    }
+
+    // -------------------------------
+    //  Booking Management
+    // -------------------------------
+    // Testing purpose
+    @Override
+    public BookingDTO deleteBooking(String adminUserId, String bookingId) {
+        checkAdminWithPermission(adminUserId, new Permissions[]{Permissions.DELETE_BOOKING});
+        return bookingService.deleteBooking(bookingId);
     }
 
     // -------------------------------

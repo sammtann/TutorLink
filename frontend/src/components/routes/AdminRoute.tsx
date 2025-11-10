@@ -33,7 +33,7 @@ const AdminRoute = () => {
   useEffect(() => {
     if (!loading && !isAdmin) {
       toast.error("Please login as admin to continue");
-      navigate("/login", { replace: true });
+      navigate("/admin/login", { replace: true });
     }
   }, [loading, isAdmin, navigate]);
 

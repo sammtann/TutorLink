@@ -3,6 +3,7 @@ package com.csy.springbootauthbe.admin.service;
 import com.csy.springbootauthbe.admin.dto.AdminDTO;
 import com.csy.springbootauthbe.admin.dto.AdminDashboardDTO;
 import com.csy.springbootauthbe.admin.entity.Permissions;
+import com.csy.springbootauthbe.booking.dto.BookingDTO;
 import com.csy.springbootauthbe.student.dto.StudentDTO;
 import com.csy.springbootauthbe.tutor.dto.TutorDTO;
 import com.csy.springbootauthbe.user.utils.UserResponse;
@@ -53,8 +54,6 @@ public interface AdminService {
 
     void createAdmin(AdminDTO adminDTO);
 
-    void createAdminByAdmin(String adminUserId, AdminDTO adminDTO);
-
     void editAdminRoles(String adminUserId, String targetAdminId, List<Permissions> newPermissions);
 
     String suspendAdmin(String adminUserId, String targetAdminId);
@@ -64,4 +63,9 @@ public interface AdminService {
     String deleteAdmin(String adminUserId, String targetAdminId);
 
     AdminDashboardDTO getDashboardSummary(String adminId);
+
+    // -------------------------------
+    //  Booking Management
+    // -------------------------------
+    BookingDTO deleteBooking(String adminUserId, String bookingId);
 }

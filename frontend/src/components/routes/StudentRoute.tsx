@@ -30,7 +30,7 @@ const StudentRoute = () => {
   useEffect(() => {
     if (!loading && !isStudent) {
       toast.error("Please login as student to continue");
-      navigate("/login", { replace: true });
+      navigate("/", { replace: true });
     }
   }, [loading, isStudent, navigate]);
 

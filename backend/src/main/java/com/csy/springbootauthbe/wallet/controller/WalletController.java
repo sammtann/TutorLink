@@ -6,6 +6,7 @@ import com.csy.springbootauthbe.wallet.service.WalletService;
 import com.stripe.model.checkout.Session;
 import com.stripe.param.checkout.SessionCreateParams;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -21,6 +22,9 @@ public class WalletController {
 
     private final WalletService walletService;
 
+    @Value("${EC2_HOST}")
+    private String frontendBaseUrl;
+
     //  Get current wallet balance
     @GetMapping("/{studentId}")
     public ResponseEntity<Wallet> getWallet(@PathVariable String studentId) {
@@ -29,7 +33,7 @@ public class WalletController {
 
     // Manually top-up credits (used by success redirect)
     @PostMapping("/topup")
-    public ResponseEntity<Wallet> topUp(@RequestBody Map<String, Object> req) {
+    public ResponseEntity<WalletTransaction> topUp(@RequestBody Map<String, Object> req) {
         String studentId = (String) req.get("studentId");
         BigDecimal amount = new BigDecimal(req.get("amount").toString());
         String refId = UUID.randomUUID().toString();
@@ -60,8 +64,8 @@ public class WalletController {
 
         SessionCreateParams params = SessionCreateParams.builder()
                 .setMode(SessionCreateParams.Mode.PAYMENT)
-                .setSuccessUrl("http://localhost:5173/wallet/success?studentId=" + studentId + "&amount=" + amount)
-                .setCancelUrl("http://localhost:5173/wallet/cancel")
+                .setSuccessUrl(frontendBaseUrl + "/wallet/success?studentId=" + studentId + "&amount=" + amount)
+                .setCancelUrl(frontendBaseUrl + "/wallet/cancel")
                 .addLineItem(
                         SessionCreateParams.LineItem.builder()
                                 .setQuantity(1L)
@@ -84,4 +88,34 @@ public class WalletController {
 
         return ResponseEntity.ok(Map.of("url", session.getUrl()));
     }
+
+    @PostMapping("/set-pin")
+    public ResponseEntity<?> setWalletPin(@RequestBody Map<String, Object> req) {
+        String studentId = (String) req.get("studentId");
+        String pin = (String) req.get("pin");
+        walletService.setWalletPin(studentId, pin);
+        return ResponseEntity.ok(Map.of("message", "Wallet PIN set successfully"));
+    }
+
+    @PostMapping("/verify-pin")
+    public ResponseEntity<?> verifyWalletPin(@RequestBody Map<String, Object> req) {
+        String studentId = (String) req.get("studentId");
+        String pin = (String) req.get("pin");
+        boolean verified = walletService.verifyWalletPin(studentId, pin);
+        return ResponseEntity.ok(Map.of("verified", verified));
+    }
+
+    @PostMapping("/withdraw")
+    public ResponseEntity<?> withdraw(@RequestBody Map<String, Object> req) {
+        String studentId = (String) req.get("studentId");
+        String pin = (String) req.get("pin");
+
+        if (!walletService.verifyWalletPin(studentId, pin)) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Invalid wallet PIN"));
+        }
+
+        Map<String, Object> result = walletService.simulateWithdrawal(studentId);
+        return ResponseEntity.ok(result);
+    }
+
 }

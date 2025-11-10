@@ -2,11 +2,11 @@ package com.csy.springbootauthbe.tutor.service;
 
 import com.csy.springbootauthbe.common.aws.AwsResponse;
 import com.csy.springbootauthbe.common.aws.AwsService;
-import com.csy.springbootauthbe.student.dto.StudentDTO;
-import com.csy.springbootauthbe.student.entity.Student;
+import com.csy.springbootauthbe.common.utils.SanitizedLogger;
 import com.csy.springbootauthbe.tutor.dto.TutorDTO;
 import com.csy.springbootauthbe.tutor.dto.TutorStagedProfileDTO;
 import com.csy.springbootauthbe.tutor.entity.QualificationFile;
+import com.csy.springbootauthbe.tutor.entity.Review;
 import com.csy.springbootauthbe.tutor.entity.Tutor;
 import com.csy.springbootauthbe.tutor.mapper.TutorMapper;
 import com.csy.springbootauthbe.tutor.repository.TutorRepository;
@@ -16,7 +16,6 @@ import com.csy.springbootauthbe.user.entity.AccountStatus;
 import com.csy.springbootauthbe.user.entity.User;
 import com.csy.springbootauthbe.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -24,19 +23,20 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.time.LocalDateTime;
 import java.util.*;
 
 
 @Service
 @RequiredArgsConstructor
-@Slf4j
 public class TutorServiceImpl implements TutorService {
 
     private final TutorRepository tutorRepository;
     private final UserRepository userRepository;
     private final TutorMapper tutorMapper;
     private final AwsService awsService;
-
+    private static final SanitizedLogger logger = SanitizedLogger.getLogger(TutorServiceImpl.class);
+    
     private static final String DEFAULT_PROFILE_URL =
             "https://tutorlink-s3.s3.us-east-1.amazonaws.com/profilePicture/default-profile-pic.jpg";
 
@@ -49,6 +49,7 @@ public class TutorServiceImpl implements TutorService {
 
     @Override
     public Optional<TutorDTO> getTutorByUserId(String userId) {
+        logger.info("Getting tutor a profile: {}", userId);
         User user = userRepository.findById(userId).orElse(null);
         Optional<TutorDTO> tutor = tutorRepository.findByUserId(userId).map(tutorMapper::toDTO);
         tutor.map(t -> {
@@ -61,6 +62,7 @@ public class TutorServiceImpl implements TutorService {
     @Override
     public TutorResponse updateTutor(String userId, TutorRequest updatedData)
         throws NoSuchAlgorithmException, IOException {
+        logger.info("Updating tutor profile: {}", updatedData.toString());
 
         User user = userRepository.findById(userId)
             .orElseThrow(() -> new UsernameNotFoundException("User not found"));
@@ -75,7 +77,7 @@ public class TutorServiceImpl implements TutorService {
                 for (QualificationFile file : oldStagedFiles) {
                     if (file.getPath() != null) {
                         awsService.deleteFile(file.getPath());
-                        log.info("Deleted rejected staged qualification from S3: {}", file.getPath());
+                        logger.info("Deleted rejected staged qualification from S3: {}", file.getPath());
                     }
                 }
             }
@@ -98,6 +100,7 @@ public class TutorServiceImpl implements TutorService {
                 ? new HashMap<>(updatedData.getAvailability())
                 : new HashMap<>()
         );
+        stagedTutor.setProfileImageUrl(tutor.getProfileImageUrl());
 
         List<QualificationFile> activeQualifications = Optional.ofNullable(tutor.getQualifications())
             .orElseGet(ArrayList::new);
@@ -171,7 +174,7 @@ public class TutorServiceImpl implements TutorService {
 
     @Override
     public TutorDTO updateProfilePicture(String tutorId, MultipartFile file) {
-        log.info("Updating profile picture for studentId: {}", tutorId);
+        logger.info("Updating profile picture for studentId: {}", tutorId);
 
         Tutor tutor = tutorRepository.findByUserId(tutorId)
                 .orElseThrow(() -> new RuntimeException("Student not found"));
@@ -182,7 +185,7 @@ public class TutorServiceImpl implements TutorService {
             String oldKey = awsService.extractKeyFromUrl(tutor.getProfileImageUrl());
             if (oldKey != null) {
                 awsService.deleteProfilePic(oldKey);
-                log.info("Deleted old profile picture from S3: {}", oldKey);
+                logger.info("Deleted old profile picture from S3: {}", oldKey);
             }
         }
 
@@ -193,7 +196,7 @@ public class TutorServiceImpl implements TutorService {
 
         // Construct public URL
         String fileUrl = "https://" + awsService.bucketName + ".s3.amazonaws.com/" + newKey;
-        log.info("Uploaded new profile picture: {}, hash: {}", fileUrl, newHash);
+        logger.info("Uploaded new profile picture: {}, hash: {}", fileUrl, newHash);
 
         tutor.setProfileImageUrl(fileUrl);
 
@@ -213,6 +216,58 @@ public class TutorServiceImpl implements TutorService {
                     .orElseThrow(() -> new UsernameNotFoundException("Tutor not found"));
         tutorRepository.delete(tutor);
     }
+
+    @Override
+    public TutorDTO addReview(String tutorId, String bookingId, String studentName, int rating, String comment) {
+        Tutor tutor = tutorRepository.findByUserId(tutorId)
+                .orElseThrow(() -> new RuntimeException("Tutor not found"));
+
+        // Initialize reviews if null
+        if (tutor.getReviews() == null) {
+            tutor.setReviews(new ArrayList<>());
+        }
+
+        // Prevent duplicate review per session
+        boolean alreadyReviewed = tutor.getReviews().stream()
+                .anyMatch(r -> r.getBookingId() != null && r.getBookingId().equals(bookingId));
+
+        if (alreadyReviewed) {
+            throw new RuntimeException("You have already reviewed this session.");
+        }
+
+        // Build new review
+        Review review = Review.builder()
+                .bookingId(bookingId)
+                .studentName(studentName)
+                .rating(rating)
+                .comment(comment)
+                .createdAt(LocalDateTime.now())
+                .build();
+
+        tutor.addReview(review);
+
+        Tutor saved = tutorRepository.save(tutor);
+        return tutorMapper.toDTO(saved);
+    }
+
+    @Override
+    public List<Review> getTutorReviewsByUserId(String userId) {
+        Tutor tutor = tutorRepository.findByUserId(userId)
+                .orElseThrow(() -> new RuntimeException("Tutor not found"));
+
+        if (tutor.getReviews() == null || tutor.getReviews().isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        // Sort newest first
+        List<Review> reviews = new ArrayList<>(tutor.getReviews());
+        reviews.sort(Comparator.comparing(
+                com.csy.springbootauthbe.tutor.entity.Review::getCreatedAt, Comparator.nullsLast(Comparator.reverseOrder()))
+        );
+
+        return reviews;
+    }
+
 
     private TutorResponse createTutorResponse(Tutor tutor, User user) {
         return TutorResponse.builder()

@@ -21,6 +21,8 @@ public class Wallet {
     private String studentId;
     private BigDecimal balance = BigDecimal.ZERO;
     private String currency = "SGD";
+    private String walletPin;
+    private Boolean pinSet = false;
     private LocalDateTime updatedAt;
 }
 

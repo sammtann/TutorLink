@@ -11,7 +11,6 @@ import { Tutor } from "@/types/TutorType";
 import TutorLessonTypeInput from "@/components/TutorLessonTypeInput";
 import { LessonTypesBySubject } from "@/types/LessonTypes";
 import { setLoading } from "@/redux/loaderSlice";
-import { set } from "react-hook-form";
 
 const ViewTutorProfile = () => {
   const navigate = useNavigate();
@@ -53,7 +52,7 @@ const ViewTutorProfile = () => {
         dispatch(setLoading(true));
         if (!user?.token) {
           toast.error("No token found. Please login again.");
-          navigate("/login");
+          navigate("/");
           return;
         }
 
@@ -166,7 +165,7 @@ const ViewTutorProfile = () => {
       return;
     }
   
-    if (!profile.qualifications || profile.qualifications.length === 0) {
+    if (!profile.fileUploads || profile.fileUploads.length === 0) {
       toast.error("Please upload at least one qualification file.");
       return;
     }
@@ -177,7 +176,7 @@ const ViewTutorProfile = () => {
       if (!user?.token) {
         toast.error("No token found. Please login again.");
         dispatch(setLoading(false));
-        navigate("/login");
+        navigate("/");
         return;
       }
       console.log(profile);

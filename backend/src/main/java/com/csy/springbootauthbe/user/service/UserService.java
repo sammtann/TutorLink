@@ -1,5 +1,6 @@
 package com.csy.springbootauthbe.user.service;
 
+import com.csy.springbootauthbe.user.entity.AccountStatus;
 import com.csy.springbootauthbe.user.entity.Role;
 import com.csy.springbootauthbe.user.entity.User;
 import com.csy.springbootauthbe.user.repository.UserRepository;
@@ -27,7 +28,7 @@ public class UserService {
         String userEmail = SecurityContextHolder.getContext().getAuthentication().getName();
 
         // Retrieve the user from MongoDB
-        User user = userRepository.findByEmail(userEmail)
+        User user = userRepository.findByEmailAndStatusNot(userEmail, AccountStatus.DELETED)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found"));
 
         // Check if the user is an admin
@@ -42,7 +43,7 @@ public class UserService {
 
         String userEmail = SecurityContextHolder.getContext().getAuthentication().getName();
 
-        User user = userRepository.findByEmail(userEmail)
+        User user = userRepository.findByEmailAndStatusNot(userEmail, AccountStatus.DELETED)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found"));
 
         EnumSet<Role> roles = EnumSet.allOf(Role.class);
@@ -58,7 +59,7 @@ public class UserService {
 
         String userEmail = SecurityContextHolder.getContext().getAuthentication().getName();
 
-        User user = userRepository.findByEmail(userEmail)
+        User user = userRepository.findByEmailAndStatusNot(userEmail, AccountStatus.DELETED)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found"));
 
         if (user.getRole() != Role.STUDENT) {

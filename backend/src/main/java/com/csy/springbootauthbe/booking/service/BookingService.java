@@ -3,6 +3,7 @@ package com.csy.springbootauthbe.booking.service;
 import com.csy.springbootauthbe.booking.dto.BookingDTO;
 import com.csy.springbootauthbe.booking.dto.BookingRequest;
 import com.csy.springbootauthbe.booking.dto.RecentBookingResponse;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Map;
@@ -19,4 +20,8 @@ public interface BookingService {
     RecentBookingResponse getUpcomingBookings(String tutorId);
     BookingDTO approveReschedule(String newBookingId);
     BookingDTO requestReschedule(String bookingId, BookingRequest newSlotRequest);
+    BookingDTO rejectReschedule(String newBookingId);
+
+    RecentBookingResponse getPastSessionsForStudent(String studentId);
+    BookingDTO deleteBooking(String bookingId);
 }

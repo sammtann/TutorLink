@@ -1,17 +1,44 @@
 name: CI/CD Pipeline
 # unit tests > SAST > Owasp dependency check (SCA) > build > DAST
 on:
-  push:
-    branches: [main]
   pull_request:
+    branches: [main]
+  push:
     branches: [main]
   workflow_dispatch: # manual trigger allowed
 
 jobs:
+  secret-scan:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Initiate Secret Scanning
+        id: trufflehog
+        uses: trufflesecurity/trufflehog@main
+        continue-on-error: true
+        with:
+          path: ./
+          # base: "${{ github.event.repository.default_branch }}"
+          head: HEAD
+          extra_args: --debug
+
+      - name: Scan Results Status
+        if: steps.trufflehog.outcome == 'failure'
+        run: exit 1
+
   # run frontend test
   frontend-test:
     name: Frontend - Test
+    needs: secret-scan
     runs-on: ubuntu-latest
+    environment: development
     defaults:
       run:
         working-directory: ./frontend/
@@ -32,15 +59,29 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-node-
 
-      - name: Install dependencies (if cache missed)
-        run: npm ci
+      - name: Run frontend tests
+        run: |
+          npm ci
+          npm run test -- --coverage
+      - name: List coverage files
+        run: ls -l coverage/ || echo "❌ coverage folder not found!"
 
-      # - name: Run Tests
-      #   run: npm test
+      - name: Validate Codecov YAML
+        run: curl --data-binary @../.codecov.yml https://codecov.io/validate
+
+      - name: Upload frontend coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage/lcov.info
+          flags: frontend
+          name: frontend-coverage
+          fail_ci_if_error: true
 
   # run backend test
   backend-test:
     name: Backend - Test
+    needs: secret-scan
     runs-on: ubuntu-latest
     environment: development
     defaults:
@@ -49,6 +90,8 @@ jobs:
     steps:
       - name: Checkout Backend
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up JDK
         uses: actions/setup-java@v4
@@ -64,10 +107,27 @@ jobs:
 
       - name: Run Tests
         env:
-          SENTRY_DSN: ''
-          SENTRY_TRACES_SAMPLE_RATE: '0'
-          SENTRY_PROFILES_SAMPLE_RATE: '0'
-        run: mvn clean test
+          SENTRY_DSN: ""
+          SENTRY_TRACES_SAMPLE_RATE: "0"
+          SENTRY_PROFILES_SAMPLE_RATE: "0"
+        run: mvn clean test jacoco:report
+
+      - name: List JaCoCo output files
+        run: |
+          echo "Listing JaCoCo reports..."
+          ls -R ./target/site/jacoco || echo "❌ jacoco.xml not found!"
+
+      - name: Validate Codecov YAML
+        run: curl --data-binary @../.codecov.yml https://codecov.io/validate
+
+      - name: Upload Backend Coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./backend/target/site/jacoco/jacoco.xml
+          flags: backend
+          name: backend-coverage
+          fail_ci_if_error: true
 
   sast:
     name: SAST - CodeQL Scan
@@ -86,7 +146,7 @@ jobs:
         with:
           languages: javascript, java
           queries: security-extended,security-and-quality
-
+          config-file: .github/configs/codeql-config.yml
       - name: Install frontend dependencies
         run: |
           cd frontend
@@ -104,10 +164,6 @@ jobs:
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3
-        with:
-          paths: |
-            frontend/src
-            backend/src
 
   # security scan
   asp-scan-frontend:

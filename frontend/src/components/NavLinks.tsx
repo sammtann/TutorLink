@@ -26,9 +26,18 @@ export const navConfig: Record<string, NavLink[]> = {
       path: "/admin/admins",
       requiredPermissions: ["VIEW_ADMIN"],
     },
+    {
+      name: "Transaction",
+      path: "/admin/transaction",
+      requiredPermissions: [], // always visible
+    },
   ],
   STUDENT: [
     { name: "Home", path: "/student/dashboard", requiredPermissions: [] },
     { name: "Find a Tutor", path: "/student/find-tutor", requiredPermissions: [] },
+  ],
+  TUTOR: [
+    { name: "Home", path: "/tutor/dashboard", requiredPermissions: [] },
+    { name: "Reviews", path: "/tutor/reviews", requiredPermissions: [] },
   ],
 };

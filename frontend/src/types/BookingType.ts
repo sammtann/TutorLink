@@ -1,6 +1,8 @@
 export interface BookingRequest {
   tutorId: string;
   studentId: string;
+  tutorName: string;
+  studentName: string;
   date: string; // yyyy-MM-dd
   start: string; // HH:mm
   end: string; // HH:mm

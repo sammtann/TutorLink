@@ -1,4 +1,4 @@
-import axios, { AxiosResponse } from "axios";
+import axios from "axios";
 
 const BASE_URL = `${import.meta.env.VITE_APP_API}/seq`;
 

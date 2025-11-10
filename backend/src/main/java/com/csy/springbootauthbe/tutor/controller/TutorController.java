@@ -1,23 +1,28 @@
 package com.csy.springbootauthbe.tutor.controller;
 
-import com.csy.springbootauthbe.student.dto.StudentDTO;
+import com.csy.springbootauthbe.common.aws.AwsService;
 import com.csy.springbootauthbe.tutor.dto.TutorDTO;
 import com.csy.springbootauthbe.tutor.entity.Availability;
 import com.csy.springbootauthbe.tutor.entity.QualificationFile;
+import com.csy.springbootauthbe.tutor.entity.Review;
 import com.csy.springbootauthbe.tutor.service.TutorService;
 import com.csy.springbootauthbe.tutor.utils.TutorRequest;
 import com.csy.springbootauthbe.tutor.utils.TutorResponse;
-import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
 
 import java.io.IOException;
 import java.security.NoSuchAlgorithmException;
+import java.time.Duration;
 import java.util.*;
+
+
 
 @RestController
 @RequestMapping("/api/v1/tutors")
@@ -25,6 +30,7 @@ import java.util.*;
 public class TutorController {
 
     private final TutorService tutorService;
+    private final AwsService awsService;
 
     @GetMapping("/{userId}")
     public ResponseEntity<TutorDTO> getTutorByUserId(@PathVariable String userId) {
@@ -75,6 +81,38 @@ public class TutorController {
                                                            @RequestParam("file") MultipartFile file) {
         return ResponseEntity.ok(tutorService.updateProfilePicture(id, file));
     }
+
+    @GetMapping("/qualifications/url")
+    public ResponseEntity<String> getQualificationUrl(@RequestParam String key) {
+        try {
+            String url = awsService.generatePresignedUrl(key);
+            return ResponseEntity.ok(url);
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body("Failed to generate presigned URL");
+        }
+    }
+
+    @PostMapping("/{tutorId}/review")
+    public ResponseEntity<TutorDTO> addReview(
+            @PathVariable String tutorId,
+            @RequestBody Map<String, Object> body) {
+
+        String bookingId = (String) body.get("bookingId");
+        String studentName = (String) body.get("studentName");
+        int rating = (int) body.get("rating");
+        String comment = (String) body.get("comment");
+
+        TutorDTO updatedTutor = tutorService.addReview(tutorId, bookingId, studentName, rating, comment);
+        return ResponseEntity.ok(updatedTutor);
+    }
+
+    @GetMapping("/{userId}/reviews")
+    public ResponseEntity<List<Review>> getTutorReviews(@PathVariable String userId) {
+        return ResponseEntity.ok(tutorService.getTutorReviewsByUserId(userId));
+    }
+
+
+
 
 
 

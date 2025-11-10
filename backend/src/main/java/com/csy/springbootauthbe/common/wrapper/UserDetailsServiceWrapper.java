@@ -1,5 +1,6 @@
 package com.csy.springbootauthbe.common.wrapper;
 
+import com.csy.springbootauthbe.user.entity.AccountStatus;
 import com.csy.springbootauthbe.user.entity.User;
 import com.csy.springbootauthbe.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -15,7 +16,7 @@ public class UserDetailsServiceWrapper implements UserDetailsService {
 
     @Override
     public UserDetailsWrapper loadUserByUsername(String email) {
-        User user = userRepository.findByEmail(email)
+        User user = userRepository.findByEmailAndStatusNot(email, AccountStatus.DELETED)
             .orElseThrow(() -> new UsernameNotFoundException("User not found: " + email));
         return new UserDetailsWrapper(user);
     }

@@ -1,0 +1,370 @@
+name: Post-Deployment Pipeline
+
+on:
+  workflow_dispatch: # manual trigger
+  workflow_run:
+    workflows: ["Deploy Pipeline"]
+    types:
+      - completed
+
+# on:
+#   pull_request:
+#     branches: [main]
+#   push:
+#     branches: [main]
+#   workflow_dispatch: # manual trigger allowed
+
+jobs:
+  # ----------------- DAST -----------------
+  dast:
+    name: DAST Scan - OWASP ZAP
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    environment: development
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Debug secret
+        run: |
+          if [ -z "${{ secrets.STAGING_URL }}" ]; then
+            echo "STAGING_URL is empty"
+            exit 1
+          else
+            echo "STAGING_URL is set"
+          fi
+
+      - name: Test connectivity
+        run: curl -I ${{ secrets.STAGING_URL }}
+
+      - name: Run OWASP ZAP baseline scan
+        run: |
+          docker run --user root --rm \
+            -v $(pwd):/zap/wrk/:rw \
+            ghcr.io/zaproxy/zaproxy:stable \
+            zap-baseline.py \
+            -t "${{ secrets.STAGING_URL }}" \
+            -r zap-report.html \
+            -d || true
+
+      - name: Upload HTML report artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: zap-html-report
+          path: zap-report.html
+
+  # ----------------- JMETER -----------------
+  jmeter:
+    name: Sanity Test - Apache JMeter
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    environment: development
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install JMeter
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y openjdk-17-jre-headless
+          wget https://archive.apache.org/dist/jmeter/binaries/apache-jmeter-5.6.3.tgz
+          tar -xzf apache-jmeter-5.6.3.tgz
+          mv apache-jmeter-5.6.3 /opt/jmeter
+          export PATH=$PATH:/opt/jmeter/bin
+
+      - name: Run all JMeter Test Plans
+        run: |
+          echo "🔍 Checking STAGING_URL value..."
+          echo "STAGING_URL: ${{ secrets.STAGING_URL }}"
+
+          mkdir -p jmeter-results jmeter-report jmeter-logs
+          chmod -R 777 jmeter-results jmeter-report jmeter-logs
+
+          for test in jmeter/tests/*.jmx; do
+            name=$(basename "$test" .jmx)
+            echo "🚀 Running JMeter test: $name"
+            /opt/jmeter/bin/jmeter -n \
+              -t "$test" \
+              -JurlBase=${{ secrets.STAGING_URL }} \
+              -Jlog_level.jmeter=DEBUG \
+              -l "jmeter-results/${name}.jtl" \
+              -j "jmeter-logs/${name}.log" \
+              -e -o "jmeter-report/${name}" || true
+            echo "✅ Finished $name — logs saved to jmeter-logs/${name}.log"
+          done
+
+      - name: Upload JMeter Reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: jmeter-reports
+          path: jmeter-report/
+
+      - name: Upload JMeter Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: jmeter-results
+          path: jmeter-results/
+
+      - name: Upload JMeter Logs
+        uses: actions/upload-artifact@v4
+        with:
+          name: jmeter-logs
+          path: jmeter-logs/
+
+  # ----------------- AI SUMMARY -----------------
+  ai-implementation:
+    name: AI Implementation
+    runs-on: ubuntu-latest
+    environment: development
+    needs: [dast, jmeter]
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download ZAP report artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: zap-html-report
+          path: ./reports
+
+      - name: Download JMeter report artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: jmeter-reports
+          path: ./jmeter-report
+
+      - name: Download JMeter results artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: jmeter-results
+          path: ./jmeter-results
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install google-genai html2text beautifulsoup4
+
+      - name: Analyze ZAP Report with Gemini
+        id: gemini_summary
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          python - <<'END'
+          import os
+          import csv
+          import glob
+          import html2text
+          import google.genai
+          from google.genai.errors import ServerError
+          import time
+          from bs4 import BeautifulSoup
+          from collections import Counter, defaultdict
+
+          os.environ["GOOGLE_API_KEY"] = os.environ["GEMINI_API_KEY"]
+          REPORT_FILE = "./reports/zap-report.html"
+
+          if not os.path.isfile(REPORT_FILE):
+              print("ZAP report not found!")
+              exit(1)
+
+          with open(REPORT_FILE, "r", encoding="utf-8") as f:
+              html_content = f.read()
+
+          soup = BeautifulSoup(html_content, "html.parser")
+          risk_cells = soup.find_all(string=lambda s: s and any(r in s for r in ["Critical", "High", "Medium", "Low", "Informational"]))
+          levels = []
+          for text in risk_cells:
+              t = text.strip().lower()
+              if "critical" in t: levels.append("Critical")
+              elif "high" in t: levels.append("High")
+              elif "medium" in t: levels.append("Medium")
+              elif "low" in t: levels.append("Low")
+              elif "informational" in t: levels.append("Informational")
+
+          counts = Counter(levels)
+          zap_data = {
+                  "Critical": counts.get("Critical", 0),
+                  "High": counts.get("High", 0),
+                  "Medium": counts.get("Medium", 0),
+                  "Low": counts.get("Low", 0),
+                  "Informational": counts.get("Informational", 0)
+              }
+          print("ZAP Risk Counts:", counts)
+
+          JMETER_RESULTS_DIR = "./jmeter-results"
+          all_jtl_files = glob.glob(os.path.join(JMETER_RESULTS_DIR, "*.jtl"))
+
+          from collections import defaultdict
+
+          jmeter_metrics = {
+              "Total Requests": 0,
+              "Successful Requests": 0,
+              "Failed Requests": 0,
+              "Total Unique APIs Tested": 0,
+              "Successful APIs": 0,
+              "Failed APIs": 0,
+              "Average Response Time (ms)": 0,
+              "Max Response Time (ms)": 0,
+              "Min Response Time (ms)": 0,
+          }
+
+          api_success_map = {}
+          total_response_times = []
+
+          for jtl_file in all_jtl_files:
+              with open(jtl_file, "r", encoding="utf-8") as f:
+                  reader = csv.DictReader(f)
+                  for row in reader:
+                      url = row.get("label") or row.get("URL") or "Unknown"
+                      success = row.get("success", "").lower() == "true"
+
+                      jmeter_metrics["Total Requests"] += 1
+                      if success:
+                          jmeter_metrics["Successful Requests"] += 1
+                      else:
+                          jmeter_metrics["Failed Requests"] += 1
+
+                      if url not in api_success_map:
+                          api_success_map[url] = {"success": 0, "fail": 0}
+                      if success:
+                          api_success_map[url]["success"] += 1
+                      else:
+                          api_success_map[url]["fail"] += 1
+
+                      try:
+                          total_response_times.append(float(row.get("elapsed", 0)))
+                      except:
+                          pass
+
+          # Calculate time metrics
+          if total_response_times:
+              jmeter_metrics["Average Response Time (ms)"] = sum(total_response_times) / len(total_response_times)
+              jmeter_metrics["Max Response Time (ms)"] = max(total_response_times)
+              jmeter_metrics["Min Response Time (ms)"] = min(total_response_times)
+
+          # API counts
+          unique_apis = list(api_success_map.keys())
+          jmeter_metrics["Total Unique APIs Tested"] = len(unique_apis)
+          jmeter_metrics["Successful APIs"] = sum(1 for u in unique_apis if api_success_map[u]["fail"] == 0)
+          jmeter_metrics["Failed APIs"] = sum(1 for u in unique_apis if api_success_map[u]["fail"] > 0)
+
+          # --- Markdown table formatting for console/comment output ---
+          def as_markdown_table(data: dict):
+              headers = ["Metric", "Value"]
+              rows = [[k, f"{v:.2f}" if isinstance(v, float) else v] for k, v in data.items()]
+              table = "| " + " | ".join(headers) + " |\n"
+              table += "|---|---|\n"
+              for r in rows:
+                  table += f"| {r[0]} | {r[1]} |\n"
+              return table
+
+          jmeter_summary_table = as_markdown_table(jmeter_metrics)
+          print("\nJMeter Summary:\n")
+          print(jmeter_summary_table)
+
+          jmeter_summary = "\n".join(
+              f"{k}: {v:.2f}" if isinstance(v, float) else f"{k}: {v}"
+              for k, v in jmeter_metrics.items()
+          )
+
+          report_text = html2text.html2text(html_content)
+          client = google.genai.Client()
+
+          summary_prompt = f"""
+          Summarize this OWASP ZAP report.
+
+          Issue counts:
+          Critical: {counts.get('Critical', 0)}
+          High: {counts.get('High', 0)}
+          Medium: {counts.get('Medium', 0)}
+          Low: {counts.get('Low', 0)}
+          Informational: {counts.get('Informational', 0)}
+
+          JMeter Metrics:{jmeter_summary}
+
+          Provide:
+          - A short overall security and performance summary
+          - Top recurring issues
+          - Any recommendations to improve security posture and performance
+
+          Report content:
+          {report_text}
+          """
+
+          # retry logic for 503 errors
+          for attempt in range(5):
+              try:
+                  response = client.models.generate_content(
+                      model="gemini-2.0-flash",
+                      contents=summary_prompt,
+                  )
+                  break
+              except ServerError as e:
+                  if e.status_code == 503:
+                      print(f"Gemini model overloaded, retrying in {5*(attempt+1)}s...")
+                      time.sleep(5*(attempt+1))
+                  else:
+                      raise
+          else:
+              print("Failed to get response after retries.")
+              response = type("R", (), {"text": "Gemini API unavailable."})()
+
+          with open("gemini_summary.txt", "w", encoding="utf-8") as f:
+              f.write("**ZAP Risk Counts:**\n")
+              f.write(as_markdown_table(zap_data))
+              
+              f.write("\n")
+
+              f.write("**JMeter Metrics:**\n")
+              f.write(jmeter_summary_table)
+              f.write("\n\n")
+
+              f.write(response.text)
+          END
+
+      - name: Export Gemini summary
+        shell: bash
+        run: |
+          echo "GEMINI_SUMMARY<<EOF" >> $GITHUB_ENV
+          cat gemini_summary.txt >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+
+      - name: Post Gemini summary as commit comment
+        uses: actions/github-script@v7
+        env:
+          COMMIT_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const commitSha = process.env.COMMIT_SHA
+            const summary = process.env.GEMINI_SUMMARY || "No AI summary available."
+            const runId = process.env.GITHUB_RUN_ID
+            const commentBody = `
+            ### 🤖 Gemini AI ZAP + JMeter Analysis (Commit)
+
+            <details>
+            <summary>Click to expand AI-generated summary</summary>
+
+            ${summary}
+
+            </details>
+
+            📊 [View ZAP & JMeter Artifacts](../../TutorLink/actions/runs/${runId})
+            `
+            if (!commitSha) {
+              console.log("⚠️ No commit SHA found — skipping comment.")
+              return
+            }
+            await github.rest.repos.createCommitComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              commit_sha: commitSha,
+              body: commentBody
+            })
+            console.log(`✅ Gemini summary posted to commit ${commitSha}`)

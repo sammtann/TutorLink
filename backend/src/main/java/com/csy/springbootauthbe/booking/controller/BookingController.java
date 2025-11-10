@@ -96,4 +96,15 @@ public class BookingController {
         return ResponseEntity.ok(approvedBooking);
     }
 
+    @PutMapping("/reschedule/{newBookingId}/reject")
+    public ResponseEntity<BookingDTO> rejectReschedule(@PathVariable String newBookingId) {
+        BookingDTO rejectedBooking = bookingService.rejectReschedule(newBookingId);
+        return ResponseEntity.ok(rejectedBooking);
+    }
+
+    @GetMapping("/student/{studentId}/past")
+    public ResponseEntity<RecentBookingResponse> getStudentPastSessions(@PathVariable String studentId) {
+        return ResponseEntity.ok(bookingService.getPastSessionsForStudent(studentId));
+    }
+
 }

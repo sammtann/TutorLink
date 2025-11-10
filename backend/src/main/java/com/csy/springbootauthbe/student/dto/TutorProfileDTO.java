@@ -1,6 +1,7 @@
 package com.csy.springbootauthbe.student.dto;
 
 import com.csy.springbootauthbe.tutor.entity.QualificationFile;
+import com.csy.springbootauthbe.tutor.entity.Review;
 import lombok.Data;
 
 import java.util.List;
@@ -19,5 +20,6 @@ public class TutorProfileDTO {
     private String profileImageUrl;
     private List<String> lessonType;
     private List<QualificationFile> qualifications;
+    private List<Review> reviews;
 }
 

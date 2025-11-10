@@ -3,6 +3,8 @@ package com.csy.springbootauthbe.admin.controller;
 import com.csy.springbootauthbe.admin.dto.AdminDTO;
 import com.csy.springbootauthbe.admin.dto.AdminDashboardDTO;
 import com.csy.springbootauthbe.admin.service.AdminService;
+import com.csy.springbootauthbe.booking.dto.BookingDTO;
+import com.csy.springbootauthbe.booking.dto.RecentBookingResponse;
 import com.csy.springbootauthbe.student.dto.StudentDTO;
 import com.csy.springbootauthbe.tutor.dto.TutorDTO;
 import com.csy.springbootauthbe.user.entity.Role;
@@ -131,5 +133,9 @@ public class AdminController {
     public ResponseEntity<UserResponse> deleteStudent(@PathVariable String adminId, @PathVariable String userId) {
         String deletedUserId = adminService.deleteStudent(adminId, userId);
         return ResponseEntity.ok(UserResponse.builder().id(deletedUserId).role(Role.STUDENT).build());
+    }
+    @DeleteMapping("/booking/{adminId}/{bookingId}")
+    public ResponseEntity<BookingDTO> deleteBookingById(@PathVariable String adminId, @PathVariable String bookingId) {
+        return ResponseEntity.ok(adminService.deleteBooking(adminId, bookingId));
     }
 }

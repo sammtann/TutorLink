@@ -3,6 +3,7 @@ package com.csy.springbootauthbe.student.service;
 import com.csy.springbootauthbe.common.aws.AwsResponse;
 import com.csy.springbootauthbe.common.aws.AwsService;
 import com.csy.springbootauthbe.common.sequence.SequenceGeneratorService;
+import com.csy.springbootauthbe.common.utils.SanitizedLogger;
 import com.csy.springbootauthbe.student.dto.StudentDTO;
 import com.csy.springbootauthbe.student.dto.TutorProfileDTO;
 import com.csy.springbootauthbe.student.entity.Student;
@@ -10,8 +11,8 @@ import com.csy.springbootauthbe.student.mapper.StudentMapper;
 import com.csy.springbootauthbe.student.repository.StudentRepository;
 import com.csy.springbootauthbe.student.utils.TutorSearchRequest;
 import com.csy.springbootauthbe.tutor.entity.QualificationFile;
+import com.csy.springbootauthbe.tutor.entity.Review;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.bson.Document;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.aggregation.*;
@@ -24,7 +25,6 @@ import java.util.*;
 
 @Service
 @RequiredArgsConstructor
-@Slf4j
 public class StudentServiceImpl implements StudentService {
 
     private final StudentRepository studentRepository;
@@ -32,13 +32,14 @@ public class StudentServiceImpl implements StudentService {
     private final MongoTemplate mongoTemplate;
     private final SequenceGeneratorService sequenceGenerator;
     private final AwsService awsService;
+    private static final SanitizedLogger logger = SanitizedLogger.getLogger(StudentServiceImpl.class);
 
     private static final String DEFAULT_PROFILE_URL =
             "https://tutorlink-s3.s3.us-east-1.amazonaws.com/profilePicture/default-profile-pic.jpg";
 
     @Override
     public StudentDTO createStudent(StudentDTO studentDTO) {
-        log.info("Creating student with data: {}", studentDTO);
+        logger.info("Creating student with data: {}", studentDTO);
 
         // generate next student number here
         String studentNumber = sequenceGenerator.getNextStudentId();
@@ -49,21 +50,21 @@ public class StudentServiceImpl implements StudentService {
 
         Student student = studentMapper.toEntity(studentDTO);
         Student saved = studentRepository.save(student);
-        log.info("Student saved with ID: {}", saved.getId());
+        logger.info("Student saved with ID: {}", saved.getId());
         return studentMapper.toDTO(saved);
     }
 
     @Override
     public Optional<StudentDTO> getStudentByUserId(String userId) {
-        log.info("Fetching student by userId: {}", userId);
+        logger.info("Fetching student by userId: {}", userId);
         Optional<Student> studentOpt = studentRepository.findByUserId(userId);
-        studentOpt.ifPresent(student -> log.info("Found student entity: {}", student));
+        studentOpt.ifPresent(student -> logger.info("Found student entity: {}", student));
         return studentOpt.map(studentMapper::toDTO);
     }
 
     @Override
     public List<TutorProfileDTO> searchTutors(TutorSearchRequest req) {
-        log.info("Searching tutors with request: {}", req);
+        logger.info("Searching tutors with request: {}", req);
 
         List<AggregationOperation> ops = new ArrayList<>();
 
@@ -107,7 +108,7 @@ public class StudentServiceImpl implements StudentService {
             ops.add(Aggregation.match(new Criteria().andOperator(criteriaList.toArray(new Criteria[0]))));
         }
 
-        ops.add(Aggregation.project("subject", "hourlyRate", "availability", "firstname", "lastname", "email", "profileImageUrl", "description", "lessonType", "qualifications" ));
+        ops.add(Aggregation.project("subject", "hourlyRate", "availability", "firstname", "lastname", "email", "profileImageUrl", "description", "lessonType", "qualifications","reviews" ));
 
         Aggregation aggregation = Aggregation.newAggregation(ops);
         List<Document> docs = mongoTemplate.aggregate(aggregation, "tutors", Document.class).getMappedResults();
@@ -122,7 +123,7 @@ public class StudentServiceImpl implements StudentService {
 
     @Override
     public Optional<TutorProfileDTO> getTutorById(String tutorId) {
-        log.info("Fetching tutor details by ID: {}", tutorId);
+        logger.info("Fetching tutor details by ID: {}", tutorId);
 
         List<AggregationOperation> ops = new ArrayList<>();
         ops.add(Aggregation.addFields()
@@ -141,25 +142,26 @@ public class StudentServiceImpl implements StudentService {
 
         ops.add(Aggregation.match(Criteria.where("_id").is(new ObjectId(tutorId))));
 
-        ops.add(Aggregation.project("subject", "hourlyRate", "availability", "userId", "firstname", "lastname", "email", "profileImageUrl", "description", "lessonType", "qualifications"));
+
+        ops.add(Aggregation.project("subject", "hourlyRate", "availability", "userId", "firstname", "lastname", "email", "profileImageUrl", "description", "lessonType", "qualifications", "reviews"));
 
         Aggregation aggregation = Aggregation.newAggregation(ops);
         List<Document> docs = mongoTemplate.aggregate(aggregation, "tutors", Document.class).getMappedResults();
 
         // --- Log the raw MongoDB documents ---
         if (docs.isEmpty()) {
-            log.warn("No tutor found with ID: {}", tutorId);
+            logger.warn("No tutor found with ID: {}", tutorId);
             return Optional.empty();
         }
 
         // Log the entire document to see what fields are present
         Document doc = docs.get(0);
-        log.info("Raw tutor document from DB: {}", doc.toJson());
+        logger.info("Raw tutor document from DB: {}", doc.toJson());
 
         // Additionally log specific fields
-        log.info("Subject: {}", doc.get("subject"));
-        log.info("Description: {}", doc.get("description"));
-        log.info("ProfileImageUrl: {}", doc.get("profileImageUrl"));
+        logger.info("Subject: {}", doc.get("subject"));
+        logger.info("Description: {}", doc.get("description"));
+        logger.info("ProfileImageUrl: {}", doc.get("profileImageUrl"));
 
         return Optional.of(mapToTutorDTO(doc));
     }
@@ -167,7 +169,7 @@ public class StudentServiceImpl implements StudentService {
 
     @Override
     public StudentDTO updateProfilePicture(String studentId, MultipartFile file) {
-        log.info("Updating profile picture for studentId: {}", studentId);
+        logger.info("Updating profile picture for studentId: {}", studentId);
 
         Student student = studentRepository.findByUserId(studentId)
                 .orElseThrow(() -> new RuntimeException("Student not found"));
@@ -178,7 +180,7 @@ public class StudentServiceImpl implements StudentService {
             String oldKey = awsService.extractKeyFromUrl(student.getProfileImageUrl());
             if (oldKey != null) {
                 awsService.deleteProfilePic(oldKey);
-                log.info("Deleted old profile picture from S3: {}", oldKey);
+                logger.info("Deleted old profile picture from S3: {}", oldKey);
             }
         }
 
@@ -189,7 +191,7 @@ public class StudentServiceImpl implements StudentService {
 
         // Construct public URL
         String fileUrl = "https://" + awsService.bucketName + ".s3.amazonaws.com/" + newKey;
-        log.info("Uploaded new profile picture: {}, hash: {}", fileUrl, newHash);
+        logger.info("Uploaded new profile picture: {}, hash: {}", fileUrl, newHash);
 
         student.setProfileImageUrl(fileUrl);
 
@@ -199,6 +201,7 @@ public class StudentServiceImpl implements StudentService {
 
 
 
+    /* ======= Helper Methods  ====================================================== */
     /* ======= Helper Methods  ====================================================== */
     private TutorProfileDTO mapToTutorDTO(Document doc) {
         TutorProfileDTO dto = new TutorProfileDTO();
@@ -213,6 +216,21 @@ public class StudentServiceImpl implements StudentService {
         dto.setProfileImageUrl(doc.getString("profileImageUrl"));
         dto.setLessonType((List<String>) doc.get("lessonType"));
 
+        //  Handle reviews
+        List<Document> reviewDocs = (List<Document>) doc.get("reviews");
+        if (reviewDocs != null) {
+            List<Review> reviews = new ArrayList<>();
+            for (Document rDoc : reviewDocs) {
+                Review review = new Review();
+                review.setStudentName(rDoc.getString("studentName"));
+                review.setRating(rDoc.getInteger("rating", 0)); // default 0 if null
+                review.setComment(rDoc.getString("comment"));
+                reviews.add(review);
+            }
+            dto.setReviews(reviews);
+        }
+
+        //  Handle qualifications
         List<Document> qDocs = (List<Document>) doc.get("qualifications");
         if (qDocs != null) {
             List<QualificationFile> files = new ArrayList<>();
@@ -230,9 +248,9 @@ public class StudentServiceImpl implements StudentService {
             dto.setQualifications(files);
         }
 
-
         return dto;
     }
+
 
 
 

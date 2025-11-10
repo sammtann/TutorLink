@@ -16,4 +16,12 @@ public interface BookingRepository extends MongoRepository<Booking, String> {
     List<Booking> findTop5ByTutorIdAndStatusAndDateBeforeOrderByDateDesc(
             String tutorId, String status, String date);
     List<Booking> findByTutorIdAndStatusInAndDateGreaterThanEqualOrderByDateAsc(String tutorId, List<String> statuses, String todayStr);
+
+    List<Booking> findByStudentIdAndStatusInAndDateBeforeOrderByDateDesc(
+            String studentId, List<String> statuses, String date);
+
+    List<Booking> findByStudentIdAndDate(String studentId, String date);
+
+
+
 }

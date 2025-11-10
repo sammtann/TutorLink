@@ -71,3 +71,48 @@ export const CreateCheckoutSession = async (
     { headers: { Authorization: `Bearer ${authtoken}` } }
   );
 };
+
+/**
+ * Set wallet PIN (first-time setup)
+ */
+export const SetWalletPin = async (
+  studentId: string,
+  pin: string,
+  authtoken: string
+): Promise<AxiosResponse<any>> => {
+  return await axios.post(
+    `${BASE_URL}/set-pin`,
+    { studentId, pin },
+    { headers: { Authorization: `Bearer ${authtoken}` } }
+  );
+};
+
+/**
+ * Verify wallet PIN
+ */
+export const VerifyWalletPin = async (
+  studentId: string,
+  pin: string,
+  authtoken: string
+): Promise<AxiosResponse<any>> => {
+  return await axios.post(
+    `${BASE_URL}/verify-pin`,
+    { studentId, pin },
+    { headers: { Authorization: `Bearer ${authtoken}` } }
+  );
+};
+
+/**
+ * Withdraw all funds (mock)
+ */
+export const WithdrawAllFunds = async (
+  studentId: string,
+  pin: string,
+  authtoken: string
+): Promise<AxiosResponse<any>> => {
+  return await axios.post(
+    `${BASE_URL}/withdraw`,
+    { studentId, pin },
+    { headers: { Authorization: `Bearer ${authtoken}` } }
+  );
+};

@@ -1,0 +1,11 @@
+name: "CodeQL configuration"
+
+paths:
+  - frontend/src
+  - backend/src
+
+paths-ignore:
+  - frontend/dist/**
+  - backend/target/**
+  - node_modules/**
+  - backend/src/test/** 

@@ -20,5 +20,9 @@ public enum Permissions {
     EDIT_ADMIN_ROLES,
     SUSPEND_ADMIN,
     DELETE_ADMIN,
+    SUPER_ADMIN,
+
+    // Booking Management
+    DELETE_BOOKING
 
 }

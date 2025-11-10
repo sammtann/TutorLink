@@ -2,6 +2,7 @@ package com.csy.springbootauthbe.tutor.dto;
 
 import com.csy.springbootauthbe.tutor.entity.Availability;
 import com.csy.springbootauthbe.tutor.entity.QualificationFile;
+import com.csy.springbootauthbe.tutor.entity.Review;
 import lombok.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -29,4 +30,5 @@ public class TutorDTO {
     private String description;
     private String rejectedReason;
     private TutorStagedProfileDTO stagedProfile;
+    private List<Review> reviews;
 }
